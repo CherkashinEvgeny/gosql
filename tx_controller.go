@@ -1,11 +1,10 @@
-package sqlx
+package sql
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"runtime"
 )
 
 type TxOptions = sql.TxOptions
@@ -59,16 +58,16 @@ func (d *DB) End(ctx context.Context, txErr error) (commitErr error, rollbackErr
 }
 
 func (d *DB) Commit(ctx context.Context) (err error) {
-	var tx *Tx
-	tx, err = d.extractTxFromContext(ctx)
-	if err != nil {
-		LogicalErrorHandler(err)
+	tx, found := d.extractTxFromContext(ctx)
+	if !found {
+		err = transactionNotFound
+		cfg.LogicalErrorHandler(err)
 		return err
 	}
 	err = tx.Commit()
 	if err != nil {
 		if err == sql.ErrTxDone {
-			LogicalErrorHandler(err)
+			cfg.LogicalErrorHandler(err)
 		}
 		return err
 	}
@@ -76,47 +75,37 @@ func (d *DB) Commit(ctx context.Context) (err error) {
 }
 
 func (d *DB) Rollback(ctx context.Context) (err error) {
-	var tx *Tx
-	tx, err = d.extractTxFromContext(ctx)
-	if err != nil {
-		LogicalErrorHandler(err)
+	tx, found := d.extractTxFromContext(ctx)
+	if !found {
+		err = transactionNotFound
+		cfg.LogicalErrorHandler(err)
 		return err
 	}
 	err = tx.Rollback()
 	if err != nil {
 		if err == sql.ErrTxDone {
-			LogicalErrorHandler(err)
+			cfg.LogicalErrorHandler(err)
 		}
 		return err
 	}
-	return err
+	return nil
 }
 
-var TxNotFoundError = errors.New("sql: transaction not found")
+var transactionNotFound = errors.New("transaction not found")
 
-var InvalidTxTypeError = errors.New("sql: transaction cast failed")
-
-func (d *DB) extractTxFromContext(ctx context.Context) (tx *Tx, err error) {
+func (d *DB) extractTxFromContext(ctx context.Context) (tx *Tx, found bool) {
 	txValue := ctx.Value(d.txKey())
 	if txValue == nil {
-		return nil, TxNotFoundError
+		return nil, false
 	}
 	var txCastOk bool
 	tx, txCastOk = txValue.(*Tx)
 	if !txCastOk {
-		return nil, InvalidTxTypeError
+		return nil, false
 	}
-	return tx, nil
+	return tx, true
 }
 
-func (d *DB) txKey() string {
+func (d *DB) txKey() (key string) {
 	return fmt.Sprintf("tx-%p", d)
-}
-
-var LogicalErrorHandler = printError
-
-func printError(err error) {
-	buf := make([]byte, 1<<16)
-	stacklen := runtime.Stack(buf, true)
-	fmt.Printf("******* DIRTY LOGIC: %s*******\n\n%s\n", err.Error(), buf[:stacklen])
 }
