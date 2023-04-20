@@ -30,46 +30,12 @@ func OpenDB(conn driver.Connector) (db *DB) {
 	return db
 }
 
-func (d *DB) Exec(query string, arg ...any) (result Result, err error) {
-	return d.DB.Exec(query, arg...)
+func txKey(d *DB) (key string) {
+	return fmt.Sprintf("tx-%p", d)
 }
-
-func (d *DB) NamedExec(query string, args map[string]any) (result Result, err error) {
-	query, posArgs := convertToPositionalParameters(query, args)
-	return d.Exec(query, posArgs...)
-}
-
-func (d *DB) ExecContext(ctx context.Context, query string, arg ...any) (result Result, err error) {
-	return d.DB.ExecContext(ctx, query, arg...)
-}
-
-func (d *DB) NamedExecContext(ctx context.Context, query string, args map[string]any) (result Result, err error) {
-	query, posArgs := convertToPositionalParameters(query, args)
-	return d.ExecContext(ctx, query, posArgs...)
-}
-
-func (d *DB) Query(query string, args ...any) (rows *Rows, err error) {
-	return d.DB.Query(query, args...)
-}
-
-func (d *DB) NamedQuery(query string, args map[string]any) (rows *Rows, err error) {
-	query, posArgs := convertToPositionalParameters(query, args)
-	return d.Query(query, posArgs...)
-}
-
-func (d *DB) QueryContext(ctx context.Context, query string, args ...any) (rows *Rows, err error) {
-	return d.DB.QueryContext(ctx, query, args...)
-}
-
-func (d *DB) NamedQueryContext(ctx context.Context, query string, args map[string]any) (rows *Rows, err error) {
-	query, posArgs := convertToPositionalParameters(query, args)
-	return d.QueryContext(ctx, query, posArgs...)
-}
-
-var _ Executor = (*DB)(nil)
 
 func (d *DB) Executor(ctx context.Context) (executor Executor) {
-	tx, found := d.extractTxFromContext(ctx)
+	tx, found := d.TxFromContext(ctx)
 	if found {
 		executor = tx
 	} else {
@@ -85,19 +51,19 @@ func (d *DB) Transactional(
 	f func(ctx context.Context) error,
 	options *TxOptions,
 ) (beginErr error, err error, commitErr error, rollbackErr error) {
-	ctx, beginErr = d.Begin(ctx, options)
+	ctx, beginErr = d.BeginTx(ctx, options)
 	if beginErr != nil {
 		return beginErr, nil, nil, nil
 	}
 	defer func() {
-		commitErr, rollbackErr = d.End(ctx, err)
+		commitErr, rollbackErr = d.EndTx(ctx, err)
 	}()
 	err = f(ctx)
 	return beginErr, err, nil, nil
 }
 
-func (d *DB) Begin(ctx context.Context, options *TxOptions) (txCtx context.Context, err error) {
-	tx, found := d.extractTxFromContext(ctx)
+func (d *DB) BeginTx(ctx context.Context, options *TxOptions) (txCtx context.Context, err error) {
+	tx, found := d.TxFromContext(ctx)
 	if found {
 		if tx.Isolation != sql.LevelDefault && tx.Isolation < options.Isolation {
 			err = transactionIsolationLevelIsToLow
@@ -116,17 +82,17 @@ func (d *DB) Begin(ctx context.Context, options *TxOptions) (txCtx context.Conte
 
 var transactionIsolationLevelIsToLow = errors.New("transaction isolation level is to low")
 
-func (d *DB) End(ctx context.Context, txErr error) (commitErr error, rollbackErr error) {
+func (d *DB) EndTx(ctx context.Context, txErr error) (commitErr error, rollbackErr error) {
 	if txErr == nil {
-		commitErr = d.Commit(ctx)
+		commitErr = d.CommitTx(ctx)
 	} else {
-		rollbackErr = d.Rollback(ctx)
+		rollbackErr = d.RollbackTx(ctx)
 	}
 	return commitErr, rollbackErr
 }
 
-func (d *DB) Commit(ctx context.Context) (err error) {
-	tx, found := d.extractTxFromContext(ctx)
+func (d *DB) CommitTx(ctx context.Context) (err error) {
+	tx, found := d.TxFromContext(ctx)
 	if !found {
 		err = transactionNotFound
 		cfg.LogicalErrorHandler(err)
@@ -142,8 +108,8 @@ func (d *DB) Commit(ctx context.Context) (err error) {
 	return err
 }
 
-func (d *DB) Rollback(ctx context.Context) (err error) {
-	tx, found := d.extractTxFromContext(ctx)
+func (d *DB) RollbackTx(ctx context.Context) (err error) {
+	tx, found := d.TxFromContext(ctx)
 	if !found {
 		err = transactionNotFound
 		cfg.LogicalErrorHandler(err)
@@ -161,19 +127,47 @@ func (d *DB) Rollback(ctx context.Context) (err error) {
 
 var transactionNotFound = errors.New("transaction not found")
 
-func (d *DB) extractTxFromContext(ctx context.Context) (tx *Tx, found bool) {
+func (d *DB) TxFromContext(ctx context.Context) (tx *Tx, found bool) {
 	txValue := ctx.Value(d.txKey)
 	if txValue == nil {
 		return nil, false
 	}
-	var txCastOk bool
-	tx, txCastOk = txValue.(*Tx)
+	tx, txCastOk := txValue.(*Tx)
 	if !txCastOk {
 		return nil, false
 	}
 	return tx, true
 }
 
-func txKey(d *DB) (key string) {
-	return fmt.Sprintf("tx-%p", d)
+var _ Executor = (*DB)(nil)
+
+func (d *DB) NamedExec(query string, args map[string]any) (result Result, err error) {
+
+	query, posArgs := convertToPositionalParameters(query, args)
+	return d.Exec(query, posArgs...)
+}
+
+func (d *DB) NamedExecContext(ctx context.Context, query string, args map[string]any) (result Result, err error) {
+	query, posArgs := convertToPositionalParameters(query, args)
+	return d.ExecContext(ctx, query, posArgs...)
+}
+
+func (d *DB) NamedQuery(query string, args map[string]any) (rows *Rows, err error) {
+	query, posArgs := convertToPositionalParameters(query, args)
+	return d.Query(query, posArgs...)
+}
+
+func (d *DB) NamedQueryContext(ctx context.Context, query string, args map[string]any) (rows *Rows, err error) {
+	query, posArgs := convertToPositionalParameters(query, args)
+	return d.QueryContext(ctx, query, posArgs...)
+}
+
+func (d *DB) NamedQueryRow(query string, args map[string]any) (row *Row) {
+	query, posArgs := convertToPositionalParameters(query, args)
+	return d.QueryRow(query, posArgs...)
+}
+
+func (d *DB) NamedQueryRowContext(ctx context.Context, query string, args map[string]any) (row *Row) {
+	query, posArgs := convertToPositionalParameters(query, args)
+	return d.QueryRowContext(ctx, query, posArgs...)
 }

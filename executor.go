@@ -21,11 +21,19 @@ type Executor interface {
 
 	QueryContext(ctx context.Context, query string, args ...any) (rows *Rows, err error)
 	NamedQueryContext(ctx context.Context, query string, args map[string]any) (rows *Rows, err error)
+
+	QueryRow(query string, args ...any) (row *Row)
+	NamedQueryRow(query string, args map[string]any) (row *Row)
+
+	QueryRowContext(ctx context.Context, query string, args ...any) (row *Row)
+	NamedQueryRowContext(ctx context.Context, query string, args map[string]any) (row *Row)
 }
 
 type Result = sql.Result
 
 type Rows = sql.Rows
+
+type Row = sql.Row
 
 func convertToPositionalParameters(str string, args map[string]any) (string, []any) {
 	tokens := tokenize(str, tokensMap)
