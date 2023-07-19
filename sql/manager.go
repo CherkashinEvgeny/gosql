@@ -3,7 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
-
+	"fmt"
 	"github.com/CherkashinEvgeny/gosql/base"
 )
 
@@ -23,53 +23,55 @@ type Manager struct {
 }
 
 func New(db *sql.DB) Manager {
-	return Manager{base.New(factory{db})}
+	return Manager{base.New(
+		fmt.Sprintf("%p", db),
+		(*baseDb)(db),
+		(*baseFactory)(db),
+	)}
 }
 
 func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) error, options ...Option) (err error) {
 	return m.base.Transactional(ctx, f, options...)
 }
 
-func (m Manager) Get(ctx context.Context) Executor {
-	return m.base.Get(ctx).(Executor)
+func (m Manager) Executor(ctx context.Context) (executor Executor) {
+	return m.base.Executor(ctx).(Executor)
 }
 
-type factory struct {
-	db *sql.DB
+type baseDb sql.DB
+
+func (d *baseDb) Executor() (executor any) {
+	return (*sql.DB)(d)
 }
 
-func (d factory) Executor() (executor any) {
-	return d.db
-}
+type baseFactory sql.DB
 
-func (d factory) Tx(ctx context.Context, _ base.Tx, options ...any) (newTx base.Tx, err error) {
+func (d *baseFactory) Tx(ctx context.Context, _ base.Tx, options ...any) (newTx base.Tx, err error) {
 	sqlOptions := &sql.TxOptions{}
 	for _, option := range options {
 		if level, ok := option.(sql.IsolationLevel); ok {
 			sqlOptions.Isolation = level
 		}
 	}
-	sqlTx, err := d.db.BeginTx(ctx, sqlOptions)
+	sqlTx, err := (*sql.DB)(d).BeginTx(ctx, sqlOptions)
 	if err != nil {
 		return nil, err
 	}
-	return txWrapper{sqlTx}, nil
+	return baseTx{sqlTx}, nil
 }
 
-type txWrapper struct {
+type baseTx struct {
 	tx *sql.Tx
 }
 
-func (t txWrapper) Executor() (executor any) {
+func (t baseTx) Executor() (executor any) {
 	return t.tx
 }
 
-func (t txWrapper) Commit(ctx context.Context) (err error) {
-	// TODO implement me
-	panic("implement me")
+func (t baseTx) Commit(_ context.Context) (err error) {
+	return t.tx.Commit()
 }
 
-func (t txWrapper) Rollback(ctx context.Context) {
-	// TODO implement me
-	panic("implement me")
+func (t baseTx) Rollback(_ context.Context) {
+	_ = t.tx.Rollback()
 }

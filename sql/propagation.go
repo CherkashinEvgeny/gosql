@@ -22,16 +22,12 @@ func (n nestedPropagation) Apply(factory base.Factory) (newFactory base.Factory)
 }
 
 type nestedPropagationFactory struct {
-	parent base.Factory
-}
-
-func (f nestedPropagationFactory) Executor() (executor any) {
-	return f.parent.Executor()
+	next base.Factory
 }
 
 func (f nestedPropagationFactory) Tx(ctx context.Context, tx base.Tx, options ...any) (newTx base.Tx, err error) {
 	if tx == nil {
-		return f.parent.Tx(ctx, tx, options...)
+		return f.next.Tx(ctx, tx, options...)
 	}
 	executor := tx.Executor().(Executor)
 	// TODO: generate uuid

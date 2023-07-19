@@ -5,46 +5,54 @@ import (
 	"fmt"
 )
 
+type Factory interface {
+	Tx(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error)
+}
+
+type Executor interface {
+	Executor() (executor any)
+}
+
+type Tx interface {
+	Executor
+	Commit(ctx context.Context) (err error)
+	Rollback(ctx context.Context)
+}
+
+type Option interface {
+	Apply(factory Factory) (newFactory Factory)
+}
+
 type Manager struct {
+	key     any
+	db      Executor
 	factory Factory
-	stor    Store
+	options []Option
 }
 
-func New(factory Factory) (manager Manager) {
+func New(key any, db Executor, factory Factory, options ...Option) (manager Manager) {
 	return Manager{
+		key:     key,
+		db:      db,
 		factory: factory,
-		stor:    keyStore{key: fmt.Sprintf("%p", factory)},
+		options: options,
 	}
-}
-
-type keyStore struct {
-	key any
-}
-
-func (s keyStore) Get(ctx context.Context) (core Tx) {
-	contextAny := ctx.Value(s.key)
-	if contextAny == nil {
-		return nil
-	}
-	core, _ = contextAny.(Tx)
-	return core
-}
-
-func (s keyStore) Set(ctx context.Context, core Tx) (newCtx context.Context) {
-	return context.WithValue(ctx, s.key, core)
 }
 
 func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) (err error), options ...Option) (err error) {
 	factory := m.factory
+	for _, option := range m.options {
+		factory = option.Apply(factory)
+	}
 	for _, option := range options {
 		factory = option.Apply(factory)
 	}
-	tx, err := factory.Tx(ctx, m.stor.Get(ctx))
+	tx, err := factory.Tx(ctx, m.extractTxFromContext(ctx))
 	if err != nil {
 		return BeginError{err}
 	}
 	if tx != nil {
-		ctx = m.stor.Set(ctx, tx)
+		ctx = m.putTxToContext(ctx, tx)
 		defer func() {
 			if r := recover(); r != nil {
 				tx.Rollback(ctx)
@@ -64,12 +72,25 @@ func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) 
 	return f(ctx)
 }
 
-func (m Manager) Get(ctx context.Context) (executor any) {
-	tx := m.stor.Get(ctx)
+func (m Manager) Executor(ctx context.Context) (executor any) {
+	tx := m.extractTxFromContext(ctx)
 	if tx == nil {
-		return m.factory.Executor()
+		return m.db.Executor()
 	}
 	return tx.Executor()
+}
+
+func (m Manager) extractTxFromContext(ctx context.Context) (tx Tx) {
+	contextAny := ctx.Value(m.key)
+	if contextAny == nil {
+		return nil
+	}
+	tx, _ = contextAny.(Tx)
+	return tx
+}
+
+func (m Manager) putTxToContext(ctx context.Context, tx Tx) (newCtx context.Context) {
+	return context.WithValue(ctx, m.key, tx)
 }
 
 type BeginError struct {

@@ -20,16 +20,12 @@ func (r requiredPropagation) Apply(factory Factory) (newFactory Factory) {
 }
 
 type requiredPropagationFactory struct {
-	parent Factory
-}
-
-func (f requiredPropagationFactory) Executor() (executor any) {
-	return f.parent.Executor()
+	next Factory
 }
 
 func (f requiredPropagationFactory) Tx(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error) {
 	if tx == nil {
-		return f.parent.Tx(ctx, tx, options)
+		return f.next.Tx(ctx, tx, options)
 	}
 	return nopTx{tx.Executor()}, nil
 }
@@ -42,18 +38,11 @@ func (r supportsPropagation) Apply(factory Factory) (newFactory Factory) {
 }
 
 type supportsPropagationFactory struct {
-	parent Factory
-}
-
-func (f supportsPropagationFactory) Executor() (executor any) {
-	return f.parent.Executor()
+	next Factory
 }
 
 func (f supportsPropagationFactory) Tx(_ context.Context, tx Tx, _ ...any) (newTx Tx, err error) {
-	if tx != nil {
-		return tx, nil
-	}
-	return nopTx{f.Executor()}, nil
+	return tx, nil
 }
 
 type mandatoryPropagation struct {
@@ -64,11 +53,7 @@ func (r mandatoryPropagation) Apply(factory Factory) (newFactory Factory) {
 }
 
 type mandatoryPropagationFactory struct {
-	parent Factory
-}
-
-func (f mandatoryPropagationFactory) Executor() (executor any) {
-	return f.parent.Executor()
+	next Factory
 }
 
 func (f mandatoryPropagationFactory) Tx(_ context.Context, tx Tx, _ ...any) (newTx Tx, err error) {
@@ -88,11 +73,7 @@ func (r neverPropagation) Apply(factory Factory) (newFactory Factory) {
 }
 
 type neverPropagationFactory struct {
-	parent Factory
-}
-
-func (f neverPropagationFactory) Executor() (executor any) {
-	return f.parent.Executor()
+	next Factory
 }
 
 func (f neverPropagationFactory) Tx(_ context.Context, tx Tx, _ ...any) (newTx Tx, err error) {
