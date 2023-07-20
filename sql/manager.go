@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
 	"github.com/CherkashinEvgeny/gosql/base"
 )
 
@@ -17,6 +18,10 @@ type Executor interface {
 }
 
 type Option = base.Option
+
+type BeginError = base.BeginError
+
+type CommitError = base.CommitError
 
 type Manager struct {
 	base base.Manager
