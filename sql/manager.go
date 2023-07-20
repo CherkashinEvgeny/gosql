@@ -53,8 +53,8 @@ type baseFactory sql.DB
 
 func (d *baseFactory) Tx(ctx context.Context, _ base.Tx, options ...any) (newTx base.Tx, err error) {
 	sqlOptions := &sql.TxOptions{}
-	for _, option := range options {
-		if level, ok := option.(sql.IsolationLevel); ok {
+	for index := len(options) - 1; index >= 0; index-- {
+		if level, ok := options[index].(sql.IsolationLevel); ok {
 			sqlOptions.Isolation = level
 		}
 	}

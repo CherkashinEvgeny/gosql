@@ -31,6 +31,9 @@ type Manager struct {
 }
 
 func New(key any, db Executor, factory Factory, options ...Option) (manager Manager) {
+	for _, option := range options {
+		factory = option.Apply(factory)
+	}
 	return Manager{
 		key:     key,
 		db:      db,
@@ -41,9 +44,6 @@ func New(key any, db Executor, factory Factory, options ...Option) (manager Mana
 
 func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) (err error), options ...Option) (err error) {
 	factory := m.factory
-	for _, option := range m.options {
-		factory = option.Apply(factory)
-	}
 	for _, option := range options {
 		factory = option.Apply(factory)
 	}

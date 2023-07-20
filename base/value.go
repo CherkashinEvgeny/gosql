@@ -23,5 +23,5 @@ type valueOptionFactory struct {
 
 func (f valueOptionFactory) Tx(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error) {
 	options = append(options, f.value)
-	return f.next.Tx(ctx, tx, options)
+	return f.next.Tx(ctx, tx, options...)
 }
