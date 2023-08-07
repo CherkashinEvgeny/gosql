@@ -9,10 +9,6 @@ type Executor interface {
 	Executor() (executor any)
 }
 
-type Valuer interface {
-	Value(key string) (value any)
-}
-
 type Factory interface {
 	Tx(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error)
 }
