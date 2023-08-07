@@ -31,7 +31,6 @@ func New(db *sql.DB) Manager {
 	return Manager{base.New(
 		fmt.Sprintf("%p", db),
 		(*baseDb)(db),
-		(*baseFactory)(db),
 	)}
 }
 
@@ -49,9 +48,7 @@ func (d *baseDb) Executor() (executor any) {
 	return (*sql.DB)(d)
 }
 
-type baseFactory sql.DB
-
-func (d *baseFactory) Tx(ctx context.Context, _ base.Tx, options ...any) (newTx base.Tx, err error) {
+func (d *baseDb) Tx(ctx context.Context, _ base.Tx, options ...any) (newTx base.Tx, err error) {
 	sqlOptions := &sql.TxOptions{}
 	for index := len(options) - 1; index >= 0; index-- {
 		if level, ok := options[index].(sql.IsolationLevel); ok {

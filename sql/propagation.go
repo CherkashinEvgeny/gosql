@@ -15,6 +15,7 @@ var (
 )
 
 type nestedPropagation struct {
+	id int64
 }
 
 func (n nestedPropagation) Apply(factory base.Factory) (newFactory base.Factory) {
@@ -49,7 +50,7 @@ func (n nestedPropagationTx) Executor() (executor any) {
 }
 
 func (n nestedPropagationTx) Commit(_ context.Context) (err error) {
-	_, err = n.executor.Exec("RELEASE SAVEPOINT  $1", n.id)
+	_, err = n.executor.Exec("RELEASE SAVEPOINT $1", n.id)
 	return err
 }
 

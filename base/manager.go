@@ -5,12 +5,21 @@ import (
 	"fmt"
 )
 
+type Executor interface {
+	Executor() (executor any)
+}
+
+type Valuer interface {
+	Value(key string) (value any)
+}
+
 type Factory interface {
 	Tx(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error)
 }
 
-type Executor interface {
-	Executor() (executor any)
+type Db interface {
+	Executor
+	Factory
 }
 
 type Tx interface {
@@ -25,25 +34,20 @@ type Option interface {
 
 type Manager struct {
 	key     any
-	db      Executor
-	factory Factory
+	db      Db
 	options []Option
 }
 
-func New(key any, db Executor, factory Factory, options ...Option) (manager Manager) {
-	for _, option := range options {
-		factory = option.Apply(factory)
-	}
+func New(key any, db Db, options ...Option) (manager Manager) {
 	return Manager{
 		key:     key,
 		db:      db,
-		factory: factory,
 		options: options,
 	}
 }
 
 func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) (err error), options ...Option) (err error) {
-	factory := m.factory
+	var factory Factory = m.db
 	for _, option := range options {
 		factory = option.Apply(factory)
 	}
