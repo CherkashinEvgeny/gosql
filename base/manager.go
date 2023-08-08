@@ -3,6 +3,7 @@ package base
 import (
 	"context"
 	"fmt"
+	"sort"
 )
 
 type Executor interface {
@@ -10,7 +11,7 @@ type Executor interface {
 }
 
 type Factory interface {
-	Tx(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error)
+	Tx(ctx context.Context, tx Tx, values Valuer) (newTx Tx, err error)
 }
 
 type Db interface {
@@ -20,11 +21,14 @@ type Db interface {
 
 type Tx interface {
 	Executor
+	Valuer
 	Commit(ctx context.Context) (err error)
 	Rollback(ctx context.Context)
 }
 
 type Option interface {
+	Name() (name string)
+	Priority() (priority int)
 	Apply(factory Factory) (newFactory Factory)
 }
 
@@ -44,10 +48,24 @@ func New(key any, db Db, options ...Option) (manager Manager) {
 
 func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) (err error), options ...Option) (err error) {
 	var factory Factory = m.db
+	optionsSet := map[string]Option{}
+	for _, option := range m.options {
+		optionsSet[option.Name()] = option
+	}
+	for _, option := range options {
+		optionsSet[option.Name()] = option
+	}
+	options = make([]Option, len(optionsSet))
+	for _, option := range optionsSet {
+		options = append(options, option)
+	}
+	sort.Slice(options, func(i, j int) bool {
+		return options[i].Priority() < options[j].Priority()
+	})
 	for _, option := range options {
 		factory = option.Apply(factory)
 	}
-	tx, err := factory.Tx(ctx, m.extractTxFromContext(ctx))
+	tx, err := factory.Tx(ctx, m.extractTxFromContext(ctx), Empty())
 	if err != nil {
 		return BeginError{err}
 	}

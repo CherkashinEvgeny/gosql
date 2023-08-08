@@ -27,10 +27,12 @@ type Manager struct {
 	base base.Manager
 }
 
-func New(db *sql.DB) Manager {
+func New(db *sql.DB, options ...Option) Manager {
 	return Manager{base.New(
 		fmt.Sprintf("%p", db),
 		(*baseDb)(db),
+		Required,
+		Isolation(sql.LevelReadCommitted),
 	)}
 }
 
@@ -48,21 +50,21 @@ func (d *baseDb) Executor() (executor any) {
 	return (*sql.DB)(d)
 }
 
-func (d *baseDb) Tx(ctx context.Context, _ base.Tx, options ...any) (newTx base.Tx, err error) {
+func (d *baseDb) Tx(ctx context.Context, _ base.Tx, options base.Valuer) (newTx base.Tx, err error) {
 	sqlOptions := &sql.TxOptions{}
-	for index := len(options) - 1; index >= 0; index-- {
-		if level, ok := options[index].(sql.IsolationLevel); ok {
-			sqlOptions.Isolation = level
-		}
+	isolation, ok := options.Value("isolation").(sql.IsolationLevel)
+	if ok {
+		sqlOptions.Isolation = isolation
 	}
 	sqlTx, err := (*sql.DB)(d).BeginTx(ctx, sqlOptions)
 	if err != nil {
 		return nil, err
 	}
-	return baseTx{sqlTx}, nil
+	return baseTx{options, sqlTx}, nil
 }
 
 type baseTx struct {
+	base.Valuer
 	tx *sql.Tx
 }
 

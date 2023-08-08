@@ -2,62 +2,64 @@ package base
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 type testDb struct {
+	handler func(ctx context.Context, tx Tx, options Valuer) (newTx Tx, err error)
 }
 
 func (t testDb) Executor() (executor any) {
 	return "db"
 }
 
-type testFactory struct {
-	handler func(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error)
-}
-
-func (t testFactory) Tx(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error) {
-	return t.handler(ctx, tx, options...)
+func (t testDb) Tx(ctx context.Context, tx Tx, options Valuer) (newTx Tx, err error) {
+	return t.handler(ctx, tx, options)
 }
 
 func TestValueGlobalPropagation(t *testing.T) {
-	manager := New("test", testDb{}, testFactory{
-		handler: func(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error) {
-			assert.Equal(t, 1, len(options))
-			assert.Equal(t, "global", options[0])
+	manager := New("test", testDb{
+		handler: func(ctx context.Context, tx Tx, options Valuer) (newTx Tx, err error) {
+			assert.Equal(t, "global", options.Value("global"))
 			return tx, nil
 		},
-	}, Value("global"))
+	}, []Option{Value("global", "global")}, []Option{})
 	_ = manager.Transactional(context.Background(), func(ctx context.Context) (err error) {
 		return nil
 	})
+}
+
+func TestValue(t *testing.T) {
+	var n any
+	v, ok := n.(sql.IsolationLevel)
+	fmt.Println(v, ok)
 }
 
 func TestValueLocalPropagation(t *testing.T) {
-	manager := New("test", testDb{}, testFactory{
-		handler: func(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error) {
-			assert.Equal(t, 1, len(options))
-			assert.Equal(t, "local", options[0])
+	manager := New("test", testDb{
+		handler: func(ctx context.Context, tx Tx, options Valuer) (newTx Tx, err error) {
+			assert.Equal(t, "local", options.Value("local"))
 			return tx, nil
 		},
-	})
+	}, []Option{}, []Option{})
 	_ = manager.Transactional(context.Background(), func(ctx context.Context) (err error) {
 		return nil
-	}, Value("local"))
+	}, Value("local", "local"))
 }
 
 func TestValueGlobalAndLocalPropagation(t *testing.T) {
-	manager := New("test", testDb{}, testFactory{
-		handler: func(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error) {
-			assert.Equal(t, 2, len(options))
-			assert.Equal(t, "global", options[0])
-			assert.Equal(t, "local", options[1])
+	manager := New("test", testDb{
+		handler: func(ctx context.Context, tx Tx, options Valuer) (newTx Tx, err error) {
+			assert.Equal(t, "local", options.Value("local"))
+			assert.Equal(t, "global", options.Value("global"))
 			return tx, nil
 		},
-	}, Value("global"))
+	}, []Option{Value("local", "local")}, []Option{})
 	_ = manager.Transactional(context.Background(), func(ctx context.Context) (err error) {
 		return nil
-	}, Value("local"))
+	}, Value("local", "local"))
 }

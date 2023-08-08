@@ -1,27 +1,38 @@
 package base
 
-import (
-	"context"
-)
-
-func Value(value any) (option Option) {
-	return valueOption{value}
+type Valuer interface {
+	Value(key string) (value any)
 }
 
-type valueOption struct {
-	value any
+var emptyInstance Valuer = empty{}
+
+func Empty() Valuer {
+	return emptyInstance
 }
 
-func (o valueOption) Apply(factory Factory) (newFactory Factory) {
-	return valueOptionFactory{factory, o.value}
+type empty struct {
 }
 
-type valueOptionFactory struct {
-	next  Factory
-	value any
+func (e empty) Value(_ string) (value any) {
+	return nil
 }
 
-func (f valueOptionFactory) Tx(ctx context.Context, tx Tx, options ...any) (newTx Tx, err error) {
-	options = append(options, f.value)
-	return f.next.Tx(ctx, tx, options...)
+func WithValue(parent Valuer, key string, value any) Valuer {
+	return keyValue{parent, key, value}
+}
+
+type keyValue struct {
+	parent Valuer
+	key    string
+	value  any
+}
+
+func (v keyValue) Value(key string) (value any) {
+	if v.key == key {
+		return v.value
+	}
+	if v.parent != nil {
+		return v.parent.Value(key)
+	}
+	return nil
 }
