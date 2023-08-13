@@ -8,15 +8,6 @@ import (
 	"github.com/CherkashinEvgeny/gosql/internal"
 )
 
-type Executor interface {
-	Exec(query string, args ...any) (result sql.Result, err error)
-	ExecContext(ctx context.Context, query string, args ...any) (result sql.Result, err error)
-	Query(query string, args ...any) (rows *sql.Rows, err error)
-	QueryContext(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error)
-	QueryRow(query string, args ...any) (row *sql.Row)
-	QueryRowContext(ctx context.Context, query string, args ...any) (row *sql.Row)
-}
-
 type Manager struct {
 	base internal.Manager
 }
@@ -24,10 +15,9 @@ type Manager struct {
 type Option = internal.Option
 
 func New(db *sql.DB, options ...Option) Manager {
-	options = append(options, WithIsolationLevel(sql.LevelReadCommitted))
 	return Manager{internal.New(
 		fmt.Sprintf("%p", db),
-		&baseDb{db},
+		&baseDb{db, options},
 	)}
 }
 
@@ -38,6 +28,8 @@ func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) 
 type BeginError = internal.BeginError
 
 type CommitError = internal.CommitError
+
+type RollbackError = internal.RollbackError
 
 func (m Manager) Executor(ctx context.Context) (executor Executor) {
 	return m.base.Executor(ctx).(Executor)

@@ -5,13 +5,14 @@ type Option struct {
 	Value any
 }
 
-type Options []Option
-
-func (o Options) Value(key string) (value any) {
-	for i := len(o) - 1; i >= 0; i-- {
-		option := o[i]
-		if option.Key == key {
-			return option.Value
+func FindOption(key string, options ...[]Option) (value any) {
+	for i := len(options) - 1; i >= 0; i-- {
+		o := options[i]
+		for j := len(o) - 1; j >= 0; j-- {
+			option := o[j]
+			if option.Key == key {
+				return option.Value
+			}
 		}
 	}
 	return nil
