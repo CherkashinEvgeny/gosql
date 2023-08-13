@@ -17,7 +17,8 @@ type Option = internal.Option
 func New(db *sql.DB, options ...Option) Manager {
 	return Manager{internal.New(
 		fmt.Sprintf("%p", db),
-		&baseDb{db, options},
+		&baseDb{db},
+		options...,
 	)}
 }
 
@@ -25,12 +26,12 @@ func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) 
 	return m.base.Transactional(ctx, f, options...)
 }
 
+func (m Manager) Executor(ctx context.Context) (executor Executor) {
+	return m.base.Executor(ctx).(Executor)
+}
+
 type BeginError = internal.BeginError
 
 type CommitError = internal.CommitError
 
 type RollbackError = internal.RollbackError
-
-func (m Manager) Executor(ctx context.Context) (executor Executor) {
-	return m.base.Executor(ctx).(Executor)
-}

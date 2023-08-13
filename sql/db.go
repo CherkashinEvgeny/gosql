@@ -10,15 +10,14 @@ import (
 )
 
 type baseDb struct {
-	db      *sql.DB
-	options []Option
+	db *sql.DB
 }
 
 func (d *baseDb) Executor() (executor any) {
 	return d.db
 }
 
-func (d *baseDb) Tx(ctx context.Context, tx internal.Tx, options ...Option) (newTx internal.Tx, err error) {
+func (d *baseDb) Tx(ctx context.Context, tx internal.Tx, options internal.Options) (newTx internal.Tx, err error) {
 	err = d.checkIsolation(tx, options)
 	if err != nil {
 		return nil, err
@@ -26,7 +25,7 @@ func (d *baseDb) Tx(ctx context.Context, tx internal.Tx, options ...Option) (new
 	return d.propagation(options)(ctx, tx, options)
 }
 
-func (d *baseDb) checkIsolation(oldTx internal.Tx, options []Option) (err error) {
+func (d *baseDb) checkIsolation(oldTx internal.Tx, options internal.Options) (err error) {
 	var txLevel sql.IsolationLevel
 	tx := oldTx
 	for tx != nil {
@@ -37,7 +36,7 @@ func (d *baseDb) checkIsolation(oldTx internal.Tx, options []Option) (err error)
 		}
 		tx = tx.Parent()
 	}
-	level := d.getIsolationLevel(options)
+	level := getIsolationLevel(options)
 	if txLevel < level {
 		if txLevel == sql.LevelDefault {
 			// sql.LevelDefault is implementation specific, so skip it
@@ -48,8 +47,8 @@ func (d *baseDb) checkIsolation(oldTx internal.Tx, options []Option) (err error)
 	return nil
 }
 
-func (d *baseDb) propagation(options []Option) (factory func(ctx context.Context, tx internal.Tx, options []Option) (newTx internal.Tx, err error)) {
-	switch d.getPropagation(options) {
+func (d *baseDb) propagation(options []internal.Option) (factory func(ctx context.Context, tx internal.Tx, options internal.Options) (newTx internal.Tx, err error)) {
+	switch getPropagation(options) {
 	case Never:
 		return d.never
 	case Supports:
@@ -65,7 +64,7 @@ func (d *baseDb) propagation(options []Option) (factory func(ctx context.Context
 	}
 }
 
-func (d *baseDb) never(_ context.Context, tx internal.Tx, _ []Option) (newTx internal.Tx, err error) {
+func (d *baseDb) never(_ context.Context, tx internal.Tx, _ internal.Options) (newTx internal.Tx, err error) {
 	if tx != nil {
 		return nil, TransactionMissingError
 	}
@@ -74,18 +73,18 @@ func (d *baseDb) never(_ context.Context, tx internal.Tx, _ []Option) (newTx int
 
 var TransactionMissingError = errors.New("transaction is missing")
 
-func (d *baseDb) supports(_ context.Context, tx internal.Tx, _ []Option) (newTx internal.Tx, err error) {
+func (d *baseDb) supports(_ context.Context, tx internal.Tx, _ internal.Options) (newTx internal.Tx, err error) {
 	return tx, nil
 }
 
-func (d *baseDb) required(ctx context.Context, tx internal.Tx, options []Option) (newTx internal.Tx, err error) {
+func (d *baseDb) required(ctx context.Context, tx internal.Tx, options internal.Options) (newTx internal.Tx, err error) {
 	if tx == nil {
 		return d.tx(ctx, options)
 	}
 	return nop(tx), nil
 }
 
-func (d *baseDb) nested(ctx context.Context, oldTx internal.Tx, options []Option) (newTx internal.Tx, err error) {
+func (d *baseDb) nested(ctx context.Context, oldTx internal.Tx, options internal.Options) (newTx internal.Tx, err error) {
 	if oldTx == nil {
 		return d.tx(ctx, options)
 	}
@@ -129,7 +128,7 @@ func (n nestedPropagationTx) Rollback(ctx context.Context) (err error) {
 	return err
 }
 
-func (d *baseDb) mandatory(_ context.Context, tx internal.Tx, _ []Option) (newTx internal.Tx, err error) {
+func (d *baseDb) mandatory(_ context.Context, tx internal.Tx, _ internal.Options) (newTx internal.Tx, err error) {
 	if tx == nil {
 		return nil, TransactionRequiredError
 	}
@@ -138,18 +137,14 @@ func (d *baseDb) mandatory(_ context.Context, tx internal.Tx, _ []Option) (newTx
 
 var TransactionRequiredError = errors.New("transaction is required")
 
-func (d *baseDb) tx(ctx context.Context, options []Option) (tx internal.Tx, err error) {
+func (d *baseDb) tx(ctx context.Context, options internal.Options) (tx internal.Tx, err error) {
 	sqlOptions := &sql.TxOptions{
-		Isolation: d.getIsolationLevel(options),
-		ReadOnly:  d.getReadonly(options),
+		Isolation: getIsolationLevel(options),
+		ReadOnly:  getReadonly(options),
 	}
 	sqlTx, err := d.db.BeginTx(ctx, sqlOptions)
 	if err != nil {
 		return nil, err
 	}
 	return baseTx{sqlTx, sqlOptions}, nil
-}
-
-func (d *baseDb) value(key string, options []Option) (value any) {
-	return internal.FindOption(key, d.options, options)
 }

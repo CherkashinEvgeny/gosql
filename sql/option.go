@@ -14,8 +14,8 @@ func WithPropagation(propagation Propagation) Option {
 	}
 }
 
-func (d *baseDb) getPropagation(options internal.Options) (propagation Propagation) {
-	propagation, _ = d.value(options, propagationKey).(Propagation)
+func getPropagation(options internal.Options) (propagation Propagation) {
+	propagation, _ = options.Value(propagationKey).(Propagation)
 	return propagation
 }
 
@@ -38,8 +38,8 @@ func WithIsolationLevel(level sql.IsolationLevel) (option Option) {
 	}
 }
 
-func (d *baseDb) getIsolationLevel(options internal.Options) (level sql.IsolationLevel) {
-	level, _ = d.value(options, isolationLevelKey).(sql.IsolationLevel)
+func getIsolationLevel(options internal.Options) (level sql.IsolationLevel) {
+	level, _ = options.Value(isolationLevelKey).(sql.IsolationLevel)
 	return level
 }
 
@@ -52,10 +52,7 @@ func WithReadonly(readonly bool) (option Option) {
 	}
 }
 
-func (d *baseDb) getReadonly(options internal.Options) (readonly bool) {
-	readonly, ok := options.Value(readonlyKey).(bool)
-	if !ok {
-		readonly, _ = d.options.Value(readonlyKey).(bool)
-	}
+func getReadonly(options internal.Options) (readonly bool) {
+	readonly, _ = options.Value(readonlyKey).(bool)
 	return readonly
 }

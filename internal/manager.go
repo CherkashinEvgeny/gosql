@@ -6,19 +6,22 @@ import (
 )
 
 type Manager struct {
-	key any
-	db  Db
+	key     any
+	db      Db
+	options []Option
 }
 
-func New(key any, db Db) (manager Manager) {
+func New(key any, db Db, options ...Option) (manager Manager) {
 	return Manager{
-		key: key,
-		db:  db,
+		key:     key,
+		db:      db,
+		options: options,
 	}
 }
 
 func (m Manager) Transactional(ctx context.Context, f func(ctx context.Context) (err error), options ...Option) (err error) {
 	tx := m.extractTxFromContext(ctx)
+	options = extend(nil, m.options, options)
 	tx, err = m.db.Tx(ctx, tx, options)
 	if err != nil {
 		return BeginError{err}
@@ -75,54 +78,62 @@ func (m Manager) putTxToContext(ctx context.Context, tx Tx) (newCtx context.Cont
 }
 
 type BeginError struct {
-	cause error
+	err error
 }
 
-func (e BeginError) Cause() error {
-	return e.cause
+func (e BeginError) Cause() (err error) {
+	return e.err
 }
 
-func (e BeginError) Unwrap() error {
-	return e.cause
+func (e BeginError) Unwrap() (err error) {
+	return e.err
 }
 
-func (e BeginError) Error() string {
-	return fmt.Sprintf("begin: %v", e.cause)
+func (e BeginError) Error() (err string) {
+	return fmt.Sprintf("begin: %v", e.err)
 }
 
 type CommitError struct {
-	cause error
+	err error
 }
 
-func (e CommitError) Cause() error {
-	return e.cause
+func (e CommitError) Cause() (err error) {
+	return e.err
 }
 
-func (e CommitError) Unwrap() error {
-	return e.cause
+func (e CommitError) Unwrap() (err error) {
+	return e.err
 }
 
-func (e CommitError) Error() string {
-	return fmt.Sprintf("commit: %v", e.cause)
+func (e CommitError) Error() (err string) {
+	return fmt.Sprintf("commit: %v", e.err)
 }
 
 type RollbackError struct {
-	cause error
-	tx    error
+	txErr       error
+	rollbackErr error
 }
 
-func (e RollbackError) Tx() error {
-	return e.tx
+func (e RollbackError) Tx() (err error) {
+	return e.txErr
 }
 
-func (e RollbackError) Cause() error {
-	return e.cause
+func (e RollbackError) Rollback() (err error) {
+	return e.rollbackErr
 }
 
-func (e RollbackError) Unwrap() error {
-	return e.cause
+func (e RollbackError) Cause() (err error) {
+	return e.rollbackErr
 }
 
-func (e RollbackError) Error() string {
-	return fmt.Sprintf("rollback: %v", e.cause)
+func (e RollbackError) Unwrap() (err error) {
+	return e.rollbackErr
+}
+
+func (e RollbackError) Errors() (errs []error) {
+	return []error{e.txErr, e.rollbackErr}
+}
+
+func (e RollbackError) Error() (err string) {
+	return fmt.Sprintf("tx: %v; rollback: %v", e.txErr, e.rollbackErr)
 }

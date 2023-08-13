@@ -5,15 +5,31 @@ type Option struct {
 	Value any
 }
 
-func FindOption(key string, options ...[]Option) (value any) {
-	for i := len(options) - 1; i >= 0; i-- {
-		o := options[i]
-		for j := len(o) - 1; j >= 0; j-- {
-			option := o[j]
-			if option.Key == key {
-				return option.Value
-			}
+type Options []Option
+
+func (o Options) Value(key string) (value any) {
+	for i := len(o) - 1; i >= 0; i-- {
+		option := o[i]
+		if option.Key == key {
+			return option.Value
 		}
 	}
 	return nil
+}
+
+func extend(dst Options, srcs ...Options) (extended Options) {
+	size := len(dst)
+	for _, src := range srcs {
+		size += len(src)
+	}
+	if cap(dst) <= size {
+		extended = dst
+	} else {
+		extended = make(Options, 0, size)
+		extended = append(extended, dst...)
+	}
+	for _, src := range srcs {
+		extended = append(extended, src...)
+	}
+	return extended
 }
